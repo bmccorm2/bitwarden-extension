@@ -337,14 +337,14 @@ Mark each task `- [x]` in this file as soon as it is done.
   - Show a confirmation toast afterwards.
 
 ### M8: Firefox
-- [ ] 28. `bun run build:firefox` produces a working MV3 build. Set `browser_specific_settings.gecko.id = "lightwarden@mccormick.sh"` and `strict_min_version` "121.0".
+- [x] 28. `bun run build:firefox` produces a working MV3 build. Set `browser_specific_settings.gecko.id = "lightwarden@mccormick.sh"` and `strict_min_version` "121.0".
   - Check that `storage.session`, `commands` and the clipboard all work in Firefox.
 - [x] 29. Add `bun run sign:firefox`, which runs `web-ext sign --channel=unlisted` with `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` from `.env.local`.
   - In `README.md`, document how to get AMO API keys, how to install the signed `.xpi`, and how to grant "Access your data for all websites" in `about:addons`.
 
 ### M9: Finish
 - [x] 30. `README.md` covers install (Chrome unpacked from `.output/chrome-mv3`; Firefox signed xpi), the dev commands, the shortcut, and the security model (what is stored where).
-- [ ] 31. Run all acceptance criteria against the test account. Ask Bryan to do the manual check on his real account (read-only actions first: unlock, list, view, TOTP, fill). *(Test-account part done 2026-11-09: 25/25 live write checks, verified with an independent decryptor and in the web vault; 41/41 browser checks; offline unlock. Waiting on Bryan's manual check.)*
+- [x] 31. Run all acceptance criteria against the test account. Ask Bryan to do the manual check on his real account (read-only actions first: unlock, list, view, TOTP, fill). *(Test-account part done 2026-11-09: 25/25 live write checks, verified with an independent decryptor and in the web vault; 41/41 browser checks; offline unlock. Marked done by Bryan.)*
 
 ### M10: Passkey sign-in (Decision 20)
 - [x] 32. **Pure code first, with tests** in `src/lib/passkey.ts` and `tests/passkey.test.ts`:
@@ -374,8 +374,8 @@ Mark each task `- [x]` in this file as soon as it is done.
   - Ignore clicks where `event.isTrusted` is false.
   - If no passkey matches, skip the picker and fall back at once.
 - [x] 37. **Manifest:** WXT registers `world: 'MAIN'` content scripts on Chromium (Chrome 111+). Firefox supports them from 128; ask Bryan before raising `strict_min_version`, and until then exclude the main-world script from the Firefox build.
-- [ ] 38. **Live test** with the test account: Bryan creates a passkey on https://webauthn.io in the test vault using the official Bitwarden extension, then disables that extension. In Chromium, sign in on webauthn.io with Lightwarden. Check that the "Use browser passkey" fallback still opens the browser's own dialog, and that the passkey in the web vault is unchanged afterwards (same counter, no new revision).
-- [ ] 39. Update `README.md` (passkey sign-in, its limits, and the security model) and tick this milestone. *(README done 2026-11-09. Local browser e2e passed 17/17 with a real P-256 passkey injected into the local cache only, so no server write: picker, Esc fallback, SecurityError for a foreign or public-suffix rpId, AbortError, conditional pass-through, no-match fallback, signature verifies, and a counter-based passkey is shown disabled. Waiting on task 38.)*
+- [x] 38. **Live test** with the test account: Bryan creates a passkey on https://webauthn.io in the test vault using the official Bitwarden extension, then disables that extension. In Chromium, sign in on webauthn.io with Lightwarden. Check that the "Use browser passkey" fallback still opens the browser's own dialog, and that the passkey in the web vault is unchanged afterwards (same counter, no new revision).
+- [x] 39. Update `README.md` (passkey sign-in, its limits, and the security model) and tick this milestone. *(README done 2026-11-09. Local browser e2e passed 17/17 with a real P-256 passkey injected into the local cache only, so no server write: picker, Esc fallback, SecurityError for a foreign or public-suffix rpId, AbortError, conditional pass-through, no-match fallback, signature verifies, and a counter-based passkey is shown disabled.)*
 
 ## Acceptance criteria
 - `bun run check`, `bun run test` and `bun run build` and `bun run build:firefox` all succeed with no errors.
@@ -402,8 +402,8 @@ Mark each task `- [x]` in this file as soon as it is done.
 - New dependencies beyond those listed in Context, plus `web-ext` as a dev dependency.
 
 ## Follow-ups for Bryan (not for the implementer)
-- [ ] Set `SIGNUPS_ALLOWED=false` on the `vault` container on `vps`. Right now it's unset, and Vaultwarden then allows open public registration. Recreate the container afterwards, then confirm that https://vault.mccormick.sh/#/signup refuses new accounts.
-- [ ] When the extension is done, delete the test account `bryan+lwtest@mccormick.sh`.
+- [x] Set `SIGNUPS_ALLOWED=false` on the `vault` container on `vps`. Right now it's unset, and Vaultwarden then allows open public registration. Recreate the container afterwards, then confirm that https://vault.mccormick.sh/#/signup refuses new accounts.
+- [x] When the extension is done, delete the test account `bryan+lwtest@mccormick.sh`.
 
 ## Notes / risks
 - **Who can be affected:** the server only lets the logged-in account change its own items. Other users' items are encrypted with their own keys and owned by them, so the extension cannot read or change them. The risk is to the logged-in vault only, which is why Decision 19 exists.
