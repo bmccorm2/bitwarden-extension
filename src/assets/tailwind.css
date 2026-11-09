@@ -1,0 +1,95 @@
+/* Bryan's theme for Tailwind v4, dark + light. Requires: npm i @fontsource-variable/open-sans
+   Follows the OS by default. Force one with <html data-theme="dark|light">.
+   Classes: bg-bg, bg-sidebar, bg-elev, border-line, text-fg, text-dim, text-faint,
+   text-accent / bg-accent / border-accent, border-running, border-ok, text-error, border-error-border,
+   shadow-popover, shadow-tooltip.
+   Colors switch on their own (light-dark()), so `dark:` variants are rarely needed. */
+@import "tailwindcss";
+/* Latin subset only (keeps the extension small). */
+@font-face {
+  font-family: 'Open Sans Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 800;
+  src: url(@fontsource-variable/open-sans/files/open-sans-latin-wght-normal.woff2) format('woff2-variations');
+}
+
+/* Make `dark:` follow data-theme, falling back to the OS. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) { @slot; }
+  }
+}
+
+@theme {
+  --color-bg: light-dark(#ffffff, #1f2227);
+  --color-sidebar: light-dark(#f4f5f7, #282b32);
+  --color-elev: light-dark(#e9ebef, #30333b);
+  --color-line: light-dark(#d5d8de, #393d47);
+  --color-fg: light-dark(#1f2227, #ffffff);
+  --color-dim: light-dark(#5f636b, #9c9ea3);
+  --color-faint: light-dark(#80848c, #6b6e75);
+  --color-accent: light-dark(#c45500, #f06c00);
+  --color-warn: light-dark(#c45500, #f06c00);
+  --color-running: light-dark(#007a9c, #00b9e4);
+  --color-ok: light-dark(#2e7d32, #4caf50);
+  --color-error: light-dark(#b42318, #eb9e9b);
+  --color-error-border: #d63d36;
+  --color-hairline: light-dark(rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.05));
+  --color-backdrop: light-dark(rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.5));
+  --color-banner-text: light-dark(#1e3a8a, #bfdbfe);
+  --color-banner-bg: light-dark(#dbeafe, #172554);
+  --color-banner-border: #2563eb;
+
+  --font-sans: "Open Sans Variable", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+
+  --shadow-popover: 0 6px 20px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.4));
+  --shadow-tooltip: 0 4px 12px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.35));
+}
+
+@layer base {
+  :root { color-scheme: light dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  /* 14px on body, not :root, so Tailwind's rem spacing isn't shrunk. */
+  body {
+    font-size: 14px;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+  }
+  * { border-color: var(--color-line); }
+}
+
+/* ---- Lightwarden popup primitives (tokens only) ---- */
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-1.5 rounded-[5px] border border-line bg-elev px-2.5 py-[3px] text-fg cursor-pointer select-none;
+  }
+  .btn:hover:not(:disabled), .btn:focus-visible { @apply border-accent outline-none; }
+  .btn:disabled { @apply opacity-50 cursor-default; }
+  .btn-primary { @apply border-accent bg-accent text-white; }
+  .icon-btn {
+    @apply inline-flex items-center justify-center rounded-[4px] p-1 text-dim cursor-pointer;
+  }
+  .icon-btn:hover:not(:disabled), .icon-btn:focus-visible { @apply bg-elev text-fg outline-none; }
+  .icon-btn:disabled { @apply opacity-50 cursor-default; }
+  .input {
+    @apply w-full rounded-[8px] border border-line bg-elev px-2.5 py-1.5 text-fg outline-none placeholder:text-faint;
+  }
+  .input:focus { @apply border-accent; }
+  .label { @apply text-[12px] font-semibold uppercase tracking-[0.05em] text-dim; }
+  .chip { @apply rounded-[5px] border border-line px-1.5 py-px text-[13px] text-dim cursor-pointer; }
+  .chip:hover { @apply text-fg; }
+  .chip-on { @apply border-accent text-fg bg-elev; }
+  .row-sel {
+    background: color-mix(in srgb, var(--color-accent) 14%, var(--color-elev));
+    box-shadow: inset 3px 0 var(--color-accent);
+  }
+  .spin { animation: lw-spin 0.8s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+}
+@keyframes lw-spin { to { transform: rotate(360deg); } }
+svg.lucide { display: block; }
