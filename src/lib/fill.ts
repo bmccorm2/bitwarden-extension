@@ -6,7 +6,7 @@ const TEXTISH = new Set(['text', 'email', 'tel', '']);
 const TOTP_RE = /otp|totp|2fa|mfa|one.?time|verification.?code|auth.?code|security.?code|code/i;
 const USER_RE = /user|email|login/i;
 
-function isVisible(el: HTMLElement): boolean {
+export function isVisible(el: HTMLElement): boolean {
   if (el.hidden || (el as HTMLInputElement).type === 'hidden') return false;
   const r = el.getBoundingClientRect();
   if (r.width <= 0 || r.height <= 0) return false;

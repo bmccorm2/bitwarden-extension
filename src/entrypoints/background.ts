@@ -3,6 +3,7 @@ import * as api from '@/lib/api';
 import { countIcon, lockIcon } from '@/lib/badge';
 import { emptyView } from '@/lib/cipher';
 import type { FillMode } from '@/lib/fill';
+import type { FormKind } from '@/lib/formfill';
 import { generatePassword } from '@/lib/generator';
 import { checkRpId, matchPasskeys, signAssertion, toB64url, usable, rawCredentialId } from '@/lib/passkey';
 import { baseDomain, matches, matchingLogins } from '@/lib/match';
@@ -96,11 +97,15 @@ async function popupAction(msg: Req): Promise<unknown> {
   switch (msg.type as keyof AnyApi) {
     case 'state':
       return stateInfo();
-    case 'unlock':
+    case 'unlock': {
       await session.unlock({ password: m.password, email: m.email, server: m.server });
       vault.clearIndex();
       await touch();
-      return stateInfo();
+      const tab = await takeAutofillAfterUnlock();
+      // Give the popup time to close so the page has focus again (TOTP clipboard copy needs it).
+      if (tab) setTimeout(() => autofill(tab).catch((e) => console.warn('Lightwarden autofill:', (e as Error).message)), 300);
+      return { ...(await stateInfo()), autofill: !!tab };
+    }
     case 'lock':
       await doLock();
       return stateInfo();
@@ -150,6 +155,8 @@ async function popupAction(msg: Req): Promise<unknown> {
       await session.setLocal('lockAfter', Math.max(0, Math.floor(Number(m.minutes) || 0)));
       await touch();
       return null;
+    case 'fillForm':
+      return fillFormItem(m.id);
     case 'removeNever': {
       const list = (await neverDomains()).filter((h) => h !== m.host);
       await session.setLocal('neverDomains', list);
@@ -262,12 +269,12 @@ interface Cycle {
 }
 const cycles = new Map<number, Cycle>();
 
-interface FrameInfo {
+interface FrameInfo<M = FillMode> {
   frameId: number;
   url: string;
-  mode: FillMode;
+  mode: M;
 }
-const probes = new Map<string, { tabId: number; frames: FrameInfo[]; onTop: () => void }>();
+const probes = new Map<string, { tabId: number; frames: FrameInfo<FillMode | FormKind>[]; onTop: () => void }>();
 
 function sendTo<T>(tabId: number, msg: ToContent, frameId = 0): Promise<T | undefined> {
   return browser.tabs.sendMessage(tabId, msg, { frameId }).catch(() => undefined) as Promise<T | undefined>;
@@ -277,15 +284,25 @@ const toast = (tabId: number, text: string) => sendTo(tabId, { type: 'toast', te
 
 /** Ask every frame which fill mode it supports; returns same-site frames, top frame first. */
 async function probe(tabId: number, topUrl: string): Promise<FrameInfo[]> {
+  const frames = await collect(tabId, { type: 'probe', requestId: '' }, true);
+  return sameSite(frames, topUrl) as FrameInfo[];
+}
+
+/** Send a probe to every frame; each replies with a probeResult message. */
+async function collect(tabId: number, msg: ToContent & { requestId: string }, topWins: boolean) {
   const requestId = crypto.randomUUID();
-  const frames: FrameInfo[] = [];
+  const frames: FrameInfo<FillMode | FormKind>[] = [];
   let onTop = () => {};
   const topSeen = new Promise<void>((r) => (onTop = r));
-  probes.set(requestId, { tabId, frames, onTop });
-  // No frameId: delivered to every frame; each replies with a probeResult message.
-  browser.tabs.sendMessage(tabId, { type: 'probe', requestId } satisfies ToContent).catch(() => {});
+  probes.set(requestId, { tabId, frames, onTop: topWins ? onTop : () => {} });
+  // No frameId: delivered to every frame.
+  browser.tabs.sendMessage(tabId, { ...msg, requestId }).catch(() => {});
   await Promise.race([topSeen, new Promise((r) => setTimeout(r, 250))]);
   probes.delete(requestId);
+  return frames;
+}
+
+function sameSite<T extends { url: string; frameId: number }>(frames: T[], topUrl: string): T[] {
   const site = baseDomain(new URL(topUrl).hostname);
   return frames
     .filter((f) => {
@@ -296,6 +313,30 @@ async function probe(tabId: number, topUrl: string): Promise<FrameInfo[]> {
       }
     })
     .sort((a, b) => (a.frameId === 0 ? -1 : b.frameId === 0 ? 1 : 0));
+}
+
+/**
+ * Popup "Fill" button for cards and identities. Identities go to same-site frames only; cards also go to
+ * cross-site frames, since payment fields usually live in a processor's iframe (Stripe, Braintree, Adyen).
+ */
+async function fillFormItem(id: string): Promise<number> {
+  const win = await browser.windows.getLastFocused({ windowTypes: ['normal'], populate: true });
+  const tab = win.tabs?.find((t) => t.active);
+  if (!tab?.id || !tab.url || !/^https?:/.test(tab.url)) throw new Error('Open a web page to fill');
+  const tabId = tab.id;
+  const item = await vault.getItem(id);
+  const kind: FormKind | null = item.card ? 'card' : item.identity ? 'identity' : null;
+  const data = item.card ?? item.identity;
+  if (!kind || !data || item.deletedDate) throw new Error('Only cards and identities can be filled');
+  await ensureContent(tabId);
+  let frames = await collect(tabId, { type: 'probeForm', requestId: '', kind }, false);
+  if (kind === 'identity') frames = sameSite(frames, tab.url);
+  let n = 0;
+  for (const f of frames) n += (await sendTo<number>(tabId, { type: 'fillForm', kind, data }, f.frameId)) ?? 0;
+  if (!n) throw new Error(`No ${kind} fields on this page`);
+  await markUsed(id);
+  await toast(tabId, `${item.name}: filled ${n} field${n === 1 ? '' : 's'}`);
+  return n;
 }
 
 /**
@@ -314,13 +355,33 @@ async function openUnlock(): Promise<void> {
   try {
     await browser.action.openPopup();
   } catch {
-    await browser.windows.create({ url: browser.runtime.getURL('/popup.html'), type: 'popup', width: 420, height: 600 });
+    await browser.windows.create({ url: browser.runtime.getURL('/popup.html?popout'), type: 'popup', width: 420, height: 600 });
   }
+}
+
+/** Shortcut pressed while locked on a web page: remember it so a successful unlock fills and closes the popup. */
+const AFTER_UNLOCK = 'autofillAfterUnlock';
+
+async function takeAutofillAfterUnlock(): Promise<Browser.tabs.Tab | null> {
+  const p = (await browser.storage.session.get(AFTER_UNLOCK))[AFTER_UNLOCK] as
+    | { tabId: number; origin: string; at: number }
+    | undefined;
+  if (!p) return null;
+  await browser.storage.session.remove(AFTER_UNLOCK);
+  if (Date.now() - p.at > PENDING_MS) return null;
+  const tab = await browser.tabs.get(p.tabId).catch(() => null);
+  if (!tab?.active || !tab.url || !/^https?:/.test(tab.url) || new URL(tab.url).origin !== p.origin) return null;
+  return tab;
 }
 
 async function autofill(tab?: Browser.tabs.Tab): Promise<void> {
   if (!tab?.id || !tab.url) [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if ((await session.getState()) !== 'unlocked') {
+    if (tab?.id && tab.url && /^https?:/.test(tab.url)) {
+      await browser.storage.session.set({
+        [AFTER_UNLOCK]: { tabId: tab.id, origin: new URL(tab.url).origin, at: Date.now() },
+      });
+    }
     await openUnlock();
     return;
   }

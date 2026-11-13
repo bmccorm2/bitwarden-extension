@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft, ExternalLink, Lock, LogOut, X } from '@lucide/svelte';
   import { browser } from 'wxt/browser';
+  import ConfirmButton from '../components/ConfirmButton.svelte';
   import { rpc } from '../rpc';
   import { app, go } from '../store.svelte';
 
@@ -47,7 +48,6 @@
   }
 
   async function logout() {
-    if (!confirm('Log out and delete the local vault cache?')) return;
     app.st = await rpc('logout');
     app.rows = [];
   }
@@ -109,6 +109,6 @@
 
   <section class="flex gap-2">
     <button class="btn" onclick={lock}><Lock size={14} />Lock</button>
-    <button class="btn" onclick={logout}><LogOut size={14} />Log out</button>
+    <ConfirmButton ask="Log out and delete the local cache?" onconfirm={logout}><LogOut size={14} />Log out</ConfirmButton>
   </section>
 </div>

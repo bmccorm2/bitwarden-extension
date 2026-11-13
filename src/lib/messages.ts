@@ -1,9 +1,10 @@
 // Typed message contracts between popup / content scripts and the background.
 
 import type { FillMode } from './fill';
+import type { FormKind } from './formfill';
 import type { GenOptions } from './generator';
 import type { LockState } from './session';
-import type { CipherView, FolderView, ListRow } from './types';
+import type { CardView, CipherView, FolderView, IdentityView, ListRow } from './types';
 
 export interface StateInfo {
   state: LockState;
@@ -24,7 +25,8 @@ export interface PendingInfo {
 /** Popup → background. Map of request type → [request, response]. */
 export interface PopupApi {
   state: [{}, StateInfo];
-  unlock: [{ password: string; email?: string; server?: string }, StateInfo];
+  /** `autofill`: the shortcut was waiting on this unlock; the background will fill, so close the popup. */
+  unlock: [{ password: string; email?: string; server?: string }, StateInfo & { autofill: boolean }];
   lock: [{}, StateInfo];
   logout: [{}, StateInfo];
   sync: [{ ifStale?: boolean }, StateInfo];
@@ -40,6 +42,8 @@ export interface PopupApi {
   /** Minutes of inactivity before auto-lock; 0 = only when the browser closes. */
   setLockAfter: [{ minutes: number }, null];
   removeNever: [{ host: string }, string[]];
+  /** Fill a card or identity into the active tab. Returns the number of fields filled. */
+  fillForm: [{ id: string }, number];
 }
 
 /** A page's `navigator.credentials.get` request, as forwarded by the content script (base64url IDs). */
@@ -87,7 +91,7 @@ export interface ContentApi {
   capture: [{ url: string; username: string; password: string; change: boolean }, null];
   getPending: [{}, PendingInfo | null];
   bannerAction: [{ action: 'save' | 'update' | 'never' | 'dismiss' }, { toast: string }];
-  probeResult: [{ requestId: string; mode: FillMode | null }, null];
+  probeResult: [{ requestId: string; mode: FillMode | FormKind | null }, null];
   passkeyGet: [PasskeyRequest, PasskeyList];
   passkeySign: [PasskeyRequest & { challenge: string; cipherId: string; credIndex: number }, PasskeyAssertion];
   openUnlock: [{}, null];
@@ -110,6 +114,8 @@ export const CONTENT_TYPES: ReadonlySet<string> = new Set<keyof ContentApi>([
 /** Background → content script. */
 export type ToContent =
   | { type: 'probe'; requestId: string }
+  | { type: 'probeForm'; requestId: string; kind: FormKind }
+  | { type: 'fillForm'; kind: FormKind; data: CardView | IdentityView }
   | {
       type: 'fill';
       mode: FillMode;

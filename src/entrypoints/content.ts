@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { captureFrom, detectMode, fillLogin, fillTotp } from '@/lib/fill';
+import { countFormFields, fillForm } from '@/lib/formfill';
 import type { ContentApi, FillReply, PasskeyAssertion, PasskeyOption, PendingInfo, PkToIsolated, PkToMain, Res, ToContent } from '@/lib/messages';
 import { copyText, showBanner, showPicker, showToast, type PickerHandle, type PickerState } from '@/lib/page-ui';
 
@@ -43,6 +44,12 @@ export default defineContentScript({
           if (mode || isTop) void send('probeResult', { requestId: msg.requestId, mode });
           return;
         }
+        case 'probeForm':
+          if (countFormFields(document, msg.kind)) void send('probeResult', { requestId: msg.requestId, mode: msg.kind });
+          return;
+        case 'fillForm':
+          sendResponse(fillForm(document, msg.kind, msg.data));
+          return;
         case 'fill': {
           const filled =
             msg.mode === 'totp'

@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { ArrowLeft, ExternalLink, LoaderCircle, Pencil, RotateCcw, Star, Trash, Undo2 } from '@lucide/svelte';
+  import { ArrowLeft, ExternalLink, LoaderCircle, Pencil, RotateCcw, Star, TextCursorInput, Trash, Undo2 } from '@lucide/svelte';
   import { CARD_FIELDS, IDENTITY_FIELDS, type CipherView } from '@/lib/types';
+  import ConfirmButton from '../components/ConfirmButton.svelte';
   import CopyButton from '../components/CopyButton.svelte';
   import Field from '../components/Field.svelte';
   import Totp from '../components/Totp.svelte';
   import TypeIcon from '../components/TypeIcon.svelte';
-  import { rpc } from '../rpc';
+  import { popout, rpc } from '../rpc';
   import { app, flash, go, loadList } from '../store.svelte';
 
   let { id }: { id: string } = $props();
@@ -69,13 +70,20 @@
   const fmt = (d: string | null) => (d ? new Date(d).toLocaleString() : '');
   const isHttp = (u: string) => /^https?:\/\//i.test(u);
 
+  async function fill() {
+    busy = true;
+    try {
+      const n = await rpc('fillForm', { id });
+      if (!popout) return window.close();
+      flash(`Filled ${n} field${n === 1 ? '' : 's'}`);
+    } catch (e) {
+      flash((e as Error).message, true);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function act(kind: 'trash' | 'restore' | 'revert') {
-    const ask = {
-      trash: 'Move this item to the trash?',
-      restore: 'Restore this item from the trash?',
-      revert: 'Write the previous version of this item back to the server?',
-    }[kind];
-    if (!confirm(ask)) return;
     busy = true;
     try {
       if (kind === 'trash') {
@@ -106,13 +114,18 @@
     {#if busy}<LoaderCircle size={14} class="spin text-running" />{/if}
     {#if item.type !== 5}
       {#if item.deletedDate}
-        <button class="btn" disabled={busy} onclick={() => act('restore')}><RotateCcw size={14} />Restore</button>
+        <ConfirmButton ask="Confirm restore" disabled={busy} onconfirm={() => act('restore')}
+          ><RotateCcw size={14} />Restore</ConfirmButton
+        >
       {:else}
+        {#if item.card || item.identity}
+          <button class="icon-btn" title="Fill on page" disabled={busy} onclick={fill}><TextCursorInput size={14} /></button>
+        {/if}
         <button class="icon-btn" title="Edit" disabled={busy} onclick={() => go({ name: 'edit', item: $state.snapshot(item!) })}
           ><Pencil size={14} /></button
         >
-        <button class="icon-btn" title="Move to trash" disabled={busy} onclick={() => act('trash')}
-          ><Trash size={14} /></button
+        <ConfirmButton class="icon-btn" title="Move to trash" ask="Move to trash?" disabled={busy} onconfirm={() => act('trash')}
+          ><Trash size={14} /></ConfirmButton
         >
       {/if}
     {/if}
@@ -214,7 +227,9 @@
     </div>
     {#if canRevert && !item.deletedDate}
       <div class="px-3 pt-3">
-        <button class="btn" disabled={busy} onclick={() => act('revert')}><Undo2 size={14} />Revert to previous version</button>
+        <ConfirmButton ask="Confirm: write the previous version back" disabled={busy} onconfirm={() => act('revert')}
+          ><Undo2 size={14} />Revert to previous version</ConfirmButton
+        >
       </div>
     {/if}
   {:else}

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Copy, Lock, Plus, RefreshCw, Search, Settings, Star } from '@lucide/svelte';
+  import { Clock, KeyRound, Lock, PictureInPicture2, Plus, RefreshCw, Search, Settings, Star, TextCursorInput, User } from '@lucide/svelte';
   import { emptyView } from '@/lib/cipher';
   import type { ListRow } from '@/lib/types';
   import TypeIcon from '../components/TypeIcon.svelte';
-  import { copy, rpc } from '../rpc';
+  import { activeTabUrl, copy, openPopout, popout, rpc } from '../rpc';
   import { app, flash, go, sync } from '../store.svelte';
 
   const FILTERS = [
@@ -23,22 +23,13 @@
   ] as const;
 
   let showNew = $state(false);
-  /** Copy menu for a login row: which row, and where to draw it (fixed, so the list can't clip it). */
-  let menu = $state<{ row: ListRow; x: number; y: number; up: boolean } | null>(null);
-
-  function openMenu(e: MouseEvent, r: ListRow) {
-    e.stopPropagation();
-    if (menu?.row.id === r.id) {
-      menu = null;
-      return;
-    }
-    const b = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const up = window.innerHeight - b.bottom < 100;
-    menu = { row: r, x: window.innerWidth - b.right, y: up ? window.innerHeight - b.top : b.bottom, up };
-  }
+  const COPY_BTNS = [
+    ['username', 'Copy username', User],
+    ['password', 'Copy password', KeyRound],
+    ['totp', 'Copy TOTP', Clock],
+  ] as const;
 
   async function copyField(r: ListRow, what: 'username' | 'password' | 'totp') {
-    menu = null;
     try {
       let value = '';
       if (what === 'username') value = r.username;
@@ -49,6 +40,15 @@
       flash(`Copied ${what === 'totp' ? 'TOTP' : what}`);
     } catch (e) {
       flash(`Copy failed: ${(e as Error).message}`, true);
+    }
+  }
+  async function fillRow(r: ListRow) {
+    try {
+      const n = await rpc('fillForm', { id: r.id });
+      if (!popout) return window.close();
+      flash(`Filled ${n} field${n === 1 ? '' : 's'}`);
+    } catch (e) {
+      flash((e as Error).message, true);
     }
   }
   let listEl: HTMLElement | undefined = $state();
@@ -114,10 +114,17 @@
     app.rows = [];
   }
 
-  function newItem(type: number) {
+  async function newItem(type: number) {
     showNew = false;
     const item = emptyView(type);
     if (app.folder && app.folder !== '__none') item.folderId = app.folder;
+    // New logins start with the current site's name and address.
+    const url = await activeTabUrl().catch(() => undefined);
+    if (item.login && url && /^https?:/i.test(url)) {
+      const u = new URL(url);
+      item.name = u.hostname.replace(/^www\./, '');
+      item.login.uris = [{ uri: u.origin, match: null }];
+    }
     go({ name: 'edit', item });
   }
 </script>
@@ -143,14 +150,24 @@
       </span>
     </button>
     {#if r.type === 1 && !r.deleted}
-      <button type="button" class="icon-btn shrink-0" title="Copy…" aria-label="Copy menu" onclick={(e) => openMenu(e, r)}
-        ><Copy size={14} /></button
+      {#each COPY_BTNS as [what, label, Icon] (what)}
+        <!-- Hidden (not removed) when empty so the columns stay aligned. -->
+        <button
+          type="button"
+          class="icon-btn shrink-0"
+          class:invisible={what === 'username' ? !r.username : what === 'totp' ? !r.hasTotp : false}
+          title={label}
+          aria-label={label}
+          onclick={() => copyField(r, what)}><Icon size={14} /></button
+        >
+      {/each}
+    {:else if (r.type === 3 || r.type === 4) && !r.deleted}
+      <button type="button" class="icon-btn shrink-0" title="Fill on page" aria-label="Fill on page" onclick={() => fillRow(r)}
+        ><TextCursorInput size={14} /></button
       >
     {/if}
   </div>
 {/snippet}
-
-<svelte:window onclick={() => (menu = null)} onkeydown={(e) => e.key === 'Escape' && menu && (menu = null)} />
 
 <header class="flex h-9 shrink-0 items-center gap-1 border-b border-line bg-sidebar px-2">
   <div class="relative flex-1">
@@ -180,6 +197,9 @@
       </div>
     {/if}
   </div>
+  {#if !popout}
+    <button class="icon-btn" title="Pop out to a window" onclick={openPopout}><PictureInPicture2 size={14} /></button>
+  {/if}
   <button class="icon-btn" title="Lock" onclick={lock}><Lock size={14} /></button>
   <button class="icon-btn" title="Settings" onclick={() => go({ name: 'settings' })}><Settings size={14} /></button>
 </header>
@@ -218,26 +238,6 @@
     <div class="p-6 text-center text-dim">{app.rows.length ? 'No matching items' : 'Vault is empty'}</div>
   {/if}
 </div>
-
-{#if menu}
-  {@const r = menu.row}
-  <div
-    class="fixed z-20 w-36 rounded-[8px] border border-line bg-sidebar py-1 shadow-popover"
-    style="right:{menu.x}px;{menu.up ? 'bottom' : 'top'}:{menu.y}px"
-  >
-    {#each [['username', 'Copy username', !!r.username], ['password', 'Copy password', true], ['totp', 'Copy TOTP', r.hasTotp]] as const as [what, label, on] (what)}
-      {#if on}
-        <button
-          class="flex w-full px-3 py-1 text-left hover:bg-elev"
-          onclick={(e) => {
-            e.stopPropagation();
-            void copyField(r, what);
-          }}>{label}</button
-        >
-      {/if}
-    {/each}
-  </div>
-{/if}
 
 <footer class="flex h-6 shrink-0 items-center justify-between border-t border-line bg-sidebar px-3 text-[12px] text-faint">
   <span>{filtered.length} items</span>

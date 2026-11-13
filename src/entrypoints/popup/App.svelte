@@ -5,7 +5,7 @@
   import List from './views/List.svelte';
   import Settings from './views/Settings.svelte';
   import Unlock from './views/Unlock.svelte';
-  import { rpc } from './rpc';
+  import { popout, rpc } from './rpc';
   import { app, loadList, sync } from './store.svelte';
 
   let error = $state('');
@@ -21,9 +21,20 @@
       error = (e as Error).message;
     }
   });
+
+  // Pop-out window: refresh lock state and site matches when switching back from a browser tab.
+  async function onFocus() {
+    if (!popout) return;
+    try {
+      app.st = await rpc('state');
+      if (app.st.state === 'unlocked') await loadList();
+    } catch {}
+  }
 </script>
 
-<main class="relative flex h-[560px] w-[420px] flex-col overflow-hidden bg-bg text-fg">
+<svelte:window onfocus={onFocus} />
+
+<main class="relative flex flex-col {popout ? 'h-screen w-screen' : 'h-[560px] w-[420px]'} overflow-hidden bg-bg text-fg">
   {#if error}
     <div class="p-4 text-error">{error}</div>
   {:else if !app.st}

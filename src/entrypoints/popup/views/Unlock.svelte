@@ -1,6 +1,7 @@
 <script lang="ts">
   import { LoaderCircle, Lock } from '@lucide/svelte';
   import { DEFAULT_SERVER } from '@/lib/session';
+  import ConfirmButton from '../components/ConfirmButton.svelte';
   import { rpc } from '../rpc';
   import { app, loadList, sync } from '../store.svelte';
 
@@ -17,8 +18,10 @@
     busy = true;
     error = '';
     try {
-      app.st = await rpc('unlock', loggedOut ? { password, email, server } : { password });
+      const { autofill, ...st } = await rpc('unlock', loggedOut ? { password, email, server } : { password });
       password = '';
+      if (autofill) return window.close();
+      app.st = st;
       app.route = { name: 'list' };
       await loadList();
       // Background login + sync was started by unlock; pick up its result.
@@ -31,7 +34,6 @@
   }
 
   async function logout() {
-    if (!confirm('Log out and delete the local vault cache?')) return;
     app.st = await rpc('logout');
   }
 </script>
@@ -72,6 +74,10 @@
     {loggedOut ? 'Log in' : 'Unlock'}
   </button>
   {#if !loggedOut}
-    <button type="button" class="self-center text-dim hover:text-accent" onclick={logout}>Log out</button>
+    <div class="self-center">
+      <ConfirmButton class="text-dim hover:text-accent" ask="Log out and delete the local cache?" onconfirm={logout}
+        >Log out</ConfirmButton
+      >
+    </div>
   {/if}
 </form>
